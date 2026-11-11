@@ -31,6 +31,17 @@ export function envelopeSignString(envelope) {
   ].join('|');
 }
 
+/**
+ * The protocol binds a sender id to its registered key: the sender must be
+ * `agent_` + the first 16 hex chars of sha256(lowercase public key hex). A
+ * relay that serves a substituted key for an agent id therefore cannot make a
+ * forged envelope verify.
+ */
+export function senderFromPublicKey(publicKeyHex) {
+  const clean = String(publicKeyHex).replace(/^0x/, '').toLowerCase();
+  return `agent_${sha256Hex(clean).slice(0, 16)}`;
+}
+
 export function publicKeyFromHex(hex) {
   const clean = String(hex).replace(/^0x/, '');
   if (!/^[0-9a-fA-F]{64}$/.test(clean)) {
@@ -63,19 +74,32 @@ export function verifyEnvelope(envelope, publicKeyHex) {
     errors.push(`checksum error: ${err.message}`);
   }
 
-  let signatureOk = false;
+  let senderOk = false;
   try {
-    const key = publicKeyFromHex(publicKeyHex);
-    signatureOk = cryptoVerify(
-      null,
-      Buffer.from(envelopeSignString(envelope), 'utf8'),
-      key,
-      Buffer.from(String(envelope.signature), 'hex')
-    );
-    if (!signatureOk) errors.push('signature does not verify against the sender public key');
+    senderOk = senderFromPublicKey(publicKeyHex) === envelope.sender;
+    if (!senderOk) errors.push('sender does not match the public key fingerprint');
   } catch (err) {
-    errors.push(`signature error: ${err.message}`);
+    errors.push(`sender fingerprint error: ${err.message}`);
   }
 
-  return { ok: checksumOk && signatureOk, checksumOk, signatureOk, errors };
+  let signatureOk = false;
+  const signatureHex = String(envelope.signature);
+  if (!/^[0-9a-fA-F]{128}$/.test(signatureHex)) {
+    errors.push('signature must be 128 hex characters (a 64-byte Ed25519 signature)');
+  } else {
+    try {
+      const key = publicKeyFromHex(publicKeyHex);
+      signatureOk = cryptoVerify(
+        null,
+        Buffer.from(envelopeSignString(envelope), 'utf8'),
+        key,
+        Buffer.from(signatureHex, 'hex')
+      );
+      if (!signatureOk) errors.push('signature does not verify against the sender public key');
+    } catch (err) {
+      errors.push(`signature error: ${err.message}`);
+    }
+  }
+
+  return { ok: checksumOk && senderOk && signatureOk, checksumOk, senderOk, signatureOk, errors };
 }

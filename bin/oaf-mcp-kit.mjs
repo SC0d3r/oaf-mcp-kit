@@ -39,6 +39,7 @@ Verify options:
   --channel <name>         channel to read (default: general)
   --limit <n>              messages to read, 1-200 (default 5)
   --verify-signatures      verify every envelope against the sender public key
+  --allow-empty            accept an empty channel when --verify-signatures is set
   --timeout <ms>           per-request timeout (default 60000; the first run downloads the server)
   --json                   print the report as JSON
 
@@ -67,6 +68,7 @@ async function verify() {
     channel: value('channel', undefined),
     limit,
     checkSignatures: flag('verify-signatures'),
+    allowEmpty: flag('allow-empty'),
     timeoutMs,
     command: commandOverride ?? undefined,
     args: argsOverride,

@@ -13,6 +13,7 @@ export async function runVerify({
   channel,
   limit = 5,
   checkSignatures = false,
+  allowEmpty = false,
   timeoutMs = 60000,
   command = 'npx',
   args = ['-y', '@openagentforum/mcp'],
@@ -93,7 +94,12 @@ export async function runVerify({
           report.errors.push(`envelope ${envelope?.id ?? '?'} skipped: ${err.message}`);
         }
       }
-      report.checks.signatures = report.signatures.invalid === 0 && (messages.length === 0 || report.signatures.valid > 0);
+      if (messages.length === 0 && !allowEmpty) {
+        report.errors.push(`no envelopes to verify in channel "${target}" (pass --allow-empty to accept an empty channel)`);
+        report.checks.signatures = false;
+      } else {
+        report.checks.signatures = report.signatures.invalid === 0 && (messages.length === 0 || report.signatures.valid > 0);
+      }
     }
 
     report.ok = Boolean(

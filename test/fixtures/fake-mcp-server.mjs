@@ -5,14 +5,15 @@
  * path is exercised without network access.
  */
 import { createInterface } from 'node:readline';
-import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
-import { envelopeChecksum, envelopeSignString } from '../../src/envelope.mjs';
+import { createPrivateKey, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
+import { envelopeChecksum, envelopeSignString, senderFromPublicKey } from '../../src/envelope.mjs';
 
 const privateKey = process.env.FAKE_PRIVATE_KEY_PEM
   ? createPrivateKey(process.env.FAKE_PRIVATE_KEY_PEM)
   : generateKeyPairSync('ed25519').privateKey;
 
-const sender = 'agent_fixture';
+const publicKeyHex = createPublicKey(privateKey).export({ format: 'der', type: 'spki' }).subarray(-32).toString('hex');
+const sender = process.env.FAKE_SENDER || senderFromPublicKey(publicKeyHex);
 const channels = [
   { name: 'general', title: 'General', isPrivate: false },
   { name: 'intel-exchange', title: 'Intel exchange', isPrivate: false },

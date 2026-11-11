@@ -4,12 +4,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateKeyPairSync } from 'node:crypto';
 import { runVerify } from '../src/verify.mjs';
+import { senderFromPublicKey } from '../src/envelope.mjs';
 
 const fixture = fileURLToPath(new URL('./fixtures/fake-mcp-server.mjs', import.meta.url));
 
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
 const publicKeyHex = publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('hex');
 const privateKeyPem = privateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+const sender = senderFromPublicKey(publicKeyHex);
 
 function fixtureOptions(extra = {}) {
   return {
@@ -27,7 +29,7 @@ test('runs the full handshake and verifies every signature', async () => {
   let lookups = 0;
   const fetchImpl = async (url) => {
     lookups += 1;
-    assert.match(url, /\/v1\/agents\/agent_fixture$/);
+    assert.equal(url, `https://hub.test/v1/agents/${sender}`);
     return { ok: true, json: async () => ({ agent: { publicKey: publicKeyHex } }) };
   };
   const report = await runVerify(fixtureOptions({ checkSignatures: true, fetchImpl }));
@@ -58,7 +60,26 @@ test('fails when the registered key does not match the signature', async () => {
   assert.ok(report.errors.some((error) => error.includes('signature')));
 });
 
-test('an empty channel does not fail the signature check', async () => {
+test('rejects an envelope whose sender does not match the registered key fingerprint', async () => {
+  const forgedSender = 'agent_0000000000000000';
+  const report = await runVerify(
+    fixtureOptions({
+      env: { ...process.env, FAKE_PRIVATE_KEY_PEM: privateKeyPem, FAKE_SENDER: forgedSender },
+      checkSignatures: true,
+      fetchImpl: async (url) => {
+        assert.equal(url, `https://hub.test/v1/agents/${forgedSender}`);
+        return { ok: true, json: async () => ({ agent: { publicKey: publicKeyHex } }) };
+      },
+    })
+  );
+
+  assert.equal(report.ok, false);
+  assert.equal(report.checks.signatures, false);
+  assert.equal(report.signatures.invalid, 3);
+  assert.ok(report.errors.some((error) => error.includes('fingerprint')));
+});
+
+test('an empty channel fails the signature check by default', async () => {
   const report = await runVerify(
     fixtureOptions({
       env: { ...process.env, FAKE_PRIVATE_KEY_PEM: privateKeyPem, FAKE_EMPTY: '1' },
@@ -68,9 +89,27 @@ test('an empty channel does not fail the signature check', async () => {
       },
     })
   );
+  assert.equal(report.ok, false);
+  assert.equal(report.messages, 0);
+  assert.equal(report.checks.signatures, false);
+  assert.ok(report.errors.some((error) => error.includes('no envelopes to verify')));
+  assert.deepEqual(report.signatures, { checked: 0, valid: 0, invalid: 0, skipped: 0 });
+});
+
+test('an empty channel passes with allowEmpty', async () => {
+  const report = await runVerify(
+    fixtureOptions({
+      env: { ...process.env, FAKE_PRIVATE_KEY_PEM: privateKeyPem, FAKE_EMPTY: '1' },
+      checkSignatures: true,
+      allowEmpty: true,
+      fetchImpl: async () => {
+        throw new Error('no agent lookup expected for an empty channel');
+      },
+    })
+  );
   assert.equal(report.ok, true, report.errors.join('; '));
   assert.equal(report.messages, 0);
-  assert.deepEqual(report.signatures, { checked: 0, valid: 0, invalid: 0, skipped: 0 });
+  assert.equal(report.checks.signatures, true);
 });
 
 test('times out when the server accepts input but never answers', async () => {
