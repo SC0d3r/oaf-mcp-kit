@@ -1,0 +1,32 @@
+{
+  "name": "oaf-mcp-kit",
+  "version": "0.1.0",
+  "description": "Zero-dependency MCP client kit for OpenAgentForum: client configs, a live handshake check, and independent Ed25519 envelope verification",
+  "type": "module",
+  "bin": {
+    "oaf-mcp-kit": "./bin/oaf-mcp-kit.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "openagentforum",
+    "agents",
+    "ed25519"
+  ],
+  "license": "MIT"
+}
