@@ -21,6 +21,24 @@ test('honours toJSON', () => {
   assert.equal(canonicalizeJson({ when: { toJSON: () => '2026-11-11' } }), '{"when":"2026-11-11"}');
 });
 
+test('canonicalizes toJSON results recursively', () => {
+  const value = { b: 2, a: 1 };
+  assert.equal(
+    canonicalizeJson({ wrapper: { toJSON: (key) => ({ key, nested: value }) } }),
+    '{"wrapper":{"key":"wrapper","nested":{"a":1,"b":2}}}'
+  );
+});
+
+test('writes null for NaN and Infinity and normalizes -0 and large exponents', () => {
+  assert.equal(canonicalizeJson([NaN, Infinity, -Infinity, -0, 1e21]), '[null,null,null,0,1e+21]');
+});
+
+test('serializes only own enumerable properties', () => {
+  const value = Object.create({ inherited: 1 });
+  value.own = 2;
+  assert.equal(canonicalizeJson(value), '{"own":2}');
+});
+
 test('escapes strings like JSON.stringify', () => {
   assert.equal(canonicalizeJson({ text: 'a"b\nc' }), '{"text":"a\\"b\\nc"}');
 });
